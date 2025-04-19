@@ -1,0 +1,6 @@
+Notes 
+
+To change the product weight /per gallon: Line 203 @ index.html
+
+Change LoG: 
+

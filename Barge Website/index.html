@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McGregor Barge Report</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f4f4f4;
+    }
+    nav {
+      background: #333;
+      color: #fff;
+      padding: 1em;
+      text-align: center;
+    }
+    nav a {
+      color: white;
+      margin: 0 10px;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    .page {
+      display: none;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #fff;
+      border-radius: 8px;
+    }
+    .page.active {
+      display: block;
+    }
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin: 5px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    .result {
+      margin-top: 10px;
+      padding: 10px;
+      background: #e8f4e8;
+      font-weight: bold;
+    }
+    .edit-btn {
+      color: blue;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="#" data-page="offloadPage">Barge Offload</a>
+    <a href="#" data-page="outboundPage">Outbound Trucks</a>
+  </nav>
+
+  <div id="offloadPage" class="page active">
+    <h2>UAN-32 Barge Offload Calculator</h2>
+    <label>Barge Name</label>
+    <input type="text" id="bargeName">
+    <label>Tank ID</label>
+    <input type="text" id="tankId">
+    <label>Location ID</label>
+    <input type="text" id="locationId">
+    <label>Gallons per Inch</label>
+    <input type="number" id="gallonsPerInch" value="100">
+    <label>Date/Time</label>
+    <input type="datetime-local" id="dateTime">
+    <label>Tank Reading - Feet</label>
+    <input type="number" id="tankFeet">
+    <label>Specific Gravity (SG)</label>
+    <input type="number" id="sg" step="0.001">
+    <label>Temperature (°F)</label>
+    <input type="number" id="temp">
+    <label>Operator Initials</label>
+    <input type="text" id="initials" maxlength="5">
+    <label>Expected Tons</label>
+    <input type="number" id="expectedTons">
+    <label>Export File Name</label>
+    <input type="text" id="exportFileName" placeholder="uan32_report">
+    <button onclick="addReading()">Add Reading</button>
+    <button onclick="generateReport()">Generate Report</button>
+    <button onclick="exportCSV()">Export to CSV</button>
+    <button onclick="exportPDF()">Export to PDF</button>
+    <h3>Readings Log</h3>
+    <table id="readingTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Date/Time</th>
+          <th>Tank Reading (feet)</th>
+          <th>Tank Reading (inches)</th>
+          <th>SG</th>
+          <th>Temp (°F)</th>
+          <th>Initials</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div class="result" id="output"></div>
+    <div class="result" id="totalTonsDisplay"></div>
+  </div>
+
+  <div id="outboundPage" class="page">
+    <h2>Outbound Truck Load Tracker</h2>
+    <label>Date/Time</label>
+    <input type="datetime-local" id="truckDateTime">
+    <label>Truck Identifier / Plate #</label>
+    <input type="text" id="truckId">
+    <label>Net Weight (lbs)</label>
+    <input type="number" id="netWeight">
+    <label>PO Number</label>
+    <input type="text" id="poNumber">
+    <button onclick="addTruckEntry()">Add Truck Load</button>
+    <div class="result" id="truckTonsTotal">Total Tons Shipped: 0.00</div>
+    <table id="truckTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Date/Time</th>
+          <th>Truck ID</th>
+          <th>Net (lbs)</th>
+          <th>Tons</th>
+          <th>PO #</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <button onclick="exportTruckCSV()">Export to CSV</button>
+    <button onclick="exportTruckPDF()">Export to PDF</button>
+  </div>
+
+  <script>
+    // Fix: Define showPage and core functions inside DOMContentLoaded so they're ready when used
+    document.addEventListener("DOMContentLoaded", () => {
+      const navLinks = document.querySelectorAll('nav a');
+      navLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          const targetPage = link.getAttribute('data-page');
+          document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+          document.getElementById(targetPage).classList.add('active');
+        });
+      });
+
+      // Now insert the addReading and other offload functions here...
+      window.addReading = function () {
+        const dateTime = document.getElementById('dateTime').value;
+        const feet = parseFloat(document.getElementById('tankFeet').value);
+        const sg = parseFloat(document.getElementById('sg').value);
+        const temp = parseFloat(document.getElementById('temp').value);
+        const initials = document.getElementById('initials').value.trim();
+
+        if (!dateTime || isNaN(feet) || isNaN(sg) || isNaN(temp) || !initials) {
+          alert("Please fill in all reading fields including initials.");
+          return;
+        }
+
+        const totalInches = feet * 12;
+        const entry = { dateTime, tankFeet: feet, tankInches: totalInches, sg, temp, initials };
+        if (!window.readings) window.readings = [];
+        window.readings.push(entry);
+        updateReadingTable();
+      };
+
+      function updateReadingTable() {
+        const tbody = document.querySelector('#readingTable tbody');
+        tbody.innerHTML = '';
+        window.readings.forEach((r, i) => {
+          const row = `<tr>
+            <td>${i + 1}</td>
+            <td>${r.dateTime}</td>
+            <td>${r.tankFeet.toFixed(2)}</td>
+            <td>${r.tankInches.toFixed(2)}</td>
+            <td>${r.sg.toFixed(3)}</td>
+            <td>${r.temp.toFixed(1)}</td>
+            <td>${r.initials}</td>
+          </tr>`;
+          tbody.innerHTML += row;
+        });
+      }
+
+      window.generateReport = function () {
+        const bargeName = document.getElementById('bargeName').value;
+        const tankId = document.getElementById('tankId').value;
+        const locationId = document.getElementById('locationId').value;
+        const expected = parseFloat(document.getElementById('expectedTons').value);
+        const gallonsPerInch = parseFloat(document.getElementById('gallonsPerInch').value);
+
+        if (isNaN(expected) || isNaN(gallonsPerInch) || window.readings.length < 2) {
+          document.getElementById('output').innerHTML = "<strong>Enter at least two readings, gallons/inch, and the expected tons.</strong>";
+          return;
+        }
+
+        let totalInchesMoved = 0;
+        let totalTons = 0;
+        let totalTimeHours = 0;
+
+        for (let i = 1; i < window.readings.length; i++) {
+          const prev = window.readings[i - 1];
+          const curr = window.readings[i];
+          const inchesMoved = curr.tankInches - prev.tankInches;
+          const avgSG = (curr.sg + prev.sg) / 2;
+          const gallonsMoved = inchesMoved * gallonsPerInch;
+          const pounds = gallonsMoved * 11.06 * avgSG;
+          totalInchesMoved += inchesMoved;
+          totalTons += pounds / 2000;
+          const startTime = new Date(prev.dateTime);
+          const endTime = new Date(curr.dateTime);
+          const hours = (endTime - startTime) / (1000 * 60 * 60);
+          totalTimeHours += hours;
+        }
+
+        window.lastTotalTons = totalTons;
+        const variance = totalTons - expected;
+        const tonsPerHour = totalTimeHours > 0 ? (totalTons / totalTimeHours).toFixed(2) : 'N/A';
+
+        document.getElementById('output').innerHTML = `
+          <strong>Barge:</strong> ${bargeName || 'N/A'}<br>
+          <strong>Tank ID:</strong> ${tankId || 'N/A'}<br>
+          <strong>Location ID:</strong> ${locationId || 'N/A'}<br>
+          <strong>Total Inches Moved:</strong> ${totalInchesMoved.toFixed(2)} in<br>
+          <strong>Calculated Tons:</strong> ${totalTons.toFixed(2)} tons<br>
+          <strong>Expected Tons:</strong> ${expected.toFixed(2)} tons<br>
+          <strong>Tons per Hour:</strong> ${tonsPerHour} tons/hour<br>
+          <strong>${variance >= 0 ? 'Long' : 'Short'}:</strong> ${Math.abs(variance).toFixed(2)} tons
+        `;
+
+        document.getElementById('totalTonsDisplay').innerHTML = `<strong>Total Tons Unloaded So Far:</strong> ${totalTons.toFixed(2)} tons`;
+      };
+
+      window.exportCSV = function () {
+        const bargeName = document.getElementById('bargeName').value;
+        const tankId = document.getElementById('tankId').value;
+        const locationId = document.getElementById('locationId').value;
+        const header = ["Barge Name", "Tank ID", "Location ID", "Date/Time", "Tank Feet", "Tank Inches", "SG", "Temp", "Initials"];
+        const rows = window.readings.map(r => [bargeName, tankId, locationId, r.dateTime, r.tankFeet.toFixed(2), r.tankInches.toFixed(2), r.sg.toFixed(3), r.temp.toFixed(1), r.initials]);
+        const csv = [header, ...rows].map(e => e.join(",")).join("");
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "uan32_readings.csv";
+        link.click();
+      };
+
+      window.exportPDF = function () {
+        const { jsPDF } = window.jspdf;
+        const bargeName = document.getElementById('bargeName').value;
+        const tankId = document.getElementById('tankId').value;
+        const locationId = document.getElementById('locationId').value;
+        const doc = new jsPDF();
+        let y = 10;
+        doc.setFontSize(12);
+        doc.text("UAN-32 Offload Report", 10, y); y += 10;
+        doc.text(`Barge: ${bargeName || 'N/A'}`, 10, y); y += 10;
+        doc.text(`Tank ID: ${tankId || 'N/A'}`, 10, y); y += 10;
+        doc.text(`Location ID: ${locationId || 'N/A'}`, 10, y); y += 10;
+        doc.text(`Total Tons Unloaded: ${window.lastTotalTons?.toFixed(2) || '0.00'} tons`, 10, y); y += 10;
+        window.readings.forEach((r, i) => {
+          if (y > 270) { doc.addPage(); y = 10; }
+          doc.text(`${i + 1}. ${r.dateTime}, ${r.tankFeet.toFixed(2)} ft (${r.tankInches.toFixed(2)} in), SG: ${r.sg.toFixed(3)}, Temp: ${r.temp.toFixed(1)}°F, ${r.initials}`, 10, y);
+          y += 8;
+        });
+        const fileName = document.getElementById('exportFileName').value.trim() || 'uan32_report';
+        doc.save(fileName + ".pdf");
+      };
+
+      window.addTruckEntry = function () {
+        const dateTime = document.getElementById('truckDateTime').value;
+        const truckId = document.getElementById('truckId').value;
+        const net = parseFloat(document.getElementById('netWeight').value);
+        const poNumber = document.getElementById('poNumber').value;
+
+        if (!dateTime || !truckId || isNaN(net) || net <= 0) {
+          alert("Please enter a valid net weight in pounds.");
+          return;
+        }
+
+        const tons = net / 2000;
+        const entry = { dateTime, truckId, net, tons, poNumber };
+        if (!window.truckLoads) window.truckLoads = [];
+        window.truckLoads.push(entry);
+        updateTruckTable();
+        clearTruckInputs();
+      };
+
+      function clearTruckInputs() {
+        document.getElementById('truckDateTime').value = '';
+        document.getElementById('truckId').value = '';
+        document.getElementById('netWeight').value = '';
+        document.getElementById('poNumber').value = '';
+      }
+
+      function updateTruckTable() {
+        const tbody = document.querySelector("#truckTable tbody");
+        tbody.innerHTML = '';
+        let totalTons = 0;
+
+        window.truckLoads.forEach((load, index) => {
+          totalTons += load.tons;
+          const row = `<tr>
+            <td>${index + 1}</td>
+            <td>${load.dateTime}</td>
+            <td>${load.truckId}</td>
+            <td>${load.net.toFixed(2)}</td>
+            <td>${load.tons.toFixed(2)}</td>
+            <td>${load.poNumber || ''}</td>
+            <td></td>
+          </tr>`;
+          tbody.innerHTML += row;
+        });
+
+        document.getElementById('truckTonsTotal').innerText = `Total Tons Shipped: ${totalTons.toFixed(2)}`;
+      }
+
+      window.exportTruckCSV = function () {
+        const header = ["Date/Time", "Truck ID", "Net (lbs)", "Tons", "PO Number"];
+        const rows = (window.truckLoads || []).map(load => [
+          load.dateTime,
+          load.truckId,
+          load.net.toFixed(2),
+          load.tons.toFixed(2),
+          load.poNumber || ''
+        ]);
+        const csv = [header, ...rows].map(e => e.join(",")).join("");
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "outbound_truck_loads.csv";
+        link.click();
+      };
+
+      window.exportTruckPDF = function () {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.setFontSize(12);
+        doc.text("Outbound Truck Loads", 10, 10);
+        let y = 20;
+        (window.truckLoads || []).forEach((load, index) => {
+          if (y > 270) {
+            doc.addPage();
+            y = 20;
+          }
+          doc.text(
+            `${index + 1}. ${load.dateTime}, Truck: ${load.truckId}, Net: ${load.net.toFixed(2)} lbs, Tons: ${load.tons.toFixed(2)}, PO: ${load.poNumber || ''}`,
+            10,
+            y
+          );
+          y += 8;
+        });
+        doc.save("outbound_truck_loads.pdf");
+      };
+    });
+  </script>
+</body>
+</html>
+
+
+
+
+
+
